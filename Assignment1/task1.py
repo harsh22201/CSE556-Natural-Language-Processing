@@ -132,20 +132,17 @@ class WordPieceTokenizer:
                 word = f"##{word}"
         return tokens
 
-    def tokenize(self, text, padding=False, max_length=None):
+    def tokenize(self, sentence, pad_size=0):
         """
-        Tokenizes the input text using the WordPiece algorithm.
+        Tokenizes the input sentence using the WordPiece algorithm.
         """
-        pre_tokenized_text = self.preprocess_data(text)
-        encoded_words = [self.encode_word(word) for word in pre_tokenized_text]
-        tokenized_text =  sum(encoded_words, [])
+        pre_processed_sentence = self.preprocess_data(sentence)
+        encoded_words = [self.encode_word(word) for word in pre_processed_sentence]
+        tokenized_sentence =  sum(encoded_words, [])
 
-        if padding:
-            assert max_length is not None, "Please provide max_length for padding."
-            tokenized_text = tokenized_text[:max_length]  # Truncate if needed
-            tokenized_text += ["[PAD]"] * (max_length - len(tokenized_text))
+        tokenized_sentence = (["[PAD]"] * pad_size) +  tokenized_sentence + (["[PAD]"] * pad_size) 
 
-        return tokenized_text
+        return tokenized_sentence
 
 
 if __name__ == "__main__":
