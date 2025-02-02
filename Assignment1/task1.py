@@ -3,11 +3,10 @@ import collections
 import json
 
 GROUP_NO = 43  
-
-VOCAB_SIZE = 5000
+VOCAB_SIZE = 6000
 
 class WordPieceTokenizer:
-    def __init__(self, vocab_size=10000):
+    def __init__(self, vocab_size = None):
         self.vocab_size = vocab_size
         self.vocabulary = {"[PAD]", "[UNK]"} # Special tokens  
 

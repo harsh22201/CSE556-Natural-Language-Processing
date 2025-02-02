@@ -2,19 +2,19 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader, random_split
-from task1 import WordPieceTokenizer, GROUP_NO, VOCAB_SIZE
+from task1 import WordPieceTokenizer, GROUP_NO
 import numpy as np
 import matplotlib.pyplot as plt
 
 WINDOW_SIZE = 2
 BATCH_SIZE = 64
-EMBEDDING_DIM = 100
-EPOCHS = 100
-LEARNING_RATE = 0.005
+EMBEDDING_DIM = 150
+EPOCHS = 20
+LEARNING_RATE = 0.001
 DROPOUT = 0 # Not used in word2vec training
 
 class Word2VecDataset(Dataset):
-    def __init__(self, corpus, tokenizer, window_size=2):
+    def __init__(self, corpus, tokenizer, window_size):
         self.tokenizer = tokenizer
         self.token2idx = {token: i for i, token in enumerate(self.tokenizer.get_vocabulary())} # Create token to index mapping
         self.idx2token = {i: token for token, i in self.token2idx.items()} # Create index to token mapping
@@ -46,7 +46,7 @@ class Word2VecDataset(Dataset):
 
 
 class Word2VecModel(nn.Module):
-    def __init__(self, vocab_size = VOCAB_SIZE, embedding_dim = EMBEDDING_DIM, dropout=DROPOUT):
+    def __init__(self, vocab_size, embedding_dim, dropout=DROPOUT):
         super(Word2VecModel, self).__init__()
         self.embeddings = nn.Embedding(vocab_size, embedding_dim) # Embedding layer to convert indices to embeddings
         # self.dropout = nn.Dropout(dropout) 
@@ -59,7 +59,7 @@ class Word2VecModel(nn.Module):
         out = self.linear(embedded) 
         return out
 
-def train(model, train_loader, val_loader, epochs=100, lr=0.001):
+def train(model, train_loader, val_loader, epochs, lr):
 
     # Initialize loss function and optimizer
     criterion = nn.CrossEntropyLoss() # CrossEntropyLoss is used because the model predicts a probability distribution over the vocabulary.
@@ -102,8 +102,8 @@ def plot_losses(train_losses, val_losses):
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
     plt.title("Training and Validation Loss")
-    plt.legend()
-    plt.savefig("cbow_loss_plot.png")
+    plt.legend(loc="lower left")
+    plt.savefig("cbow_losses.png")
     plt.show()
 
 def cosine_similarity(vec1, vec2):
@@ -117,10 +117,11 @@ def find_triplets(dataset, model, no_of_triplets=2):
     Returns a list of triplets: (anchor, positive, negative), 
     where anchor and positive have high cosine similarity, 
     and negative has low similarity with the anchor.
+    Also returns cosine similarity scores across all pairs in each triplet.
     """
     triplets = []
+    cosine_similarities = []  # To store cosine similarities for each triplet
     embeddings = model.embeddings.weight.data.cpu().numpy()  # Get embedding matrix
-    print(embeddings.shape)
     tokens_idx = list(dataset.idx2token.keys())  # List of token indices
     token_list = list(dataset.idx2token.values())  # List of actual tokens
 
@@ -140,10 +141,16 @@ def find_triplets(dataset, model, no_of_triplets=2):
         negative_idx = sorted_indices[-1]  # Least similar word
 
         anchor, positive, negative = token_list[anchor_idx], token_list[positive_idx], token_list[negative_idx]
+        
+        # Cosine similarities for each pair
+        anchor_positive_similarity = similarities[positive_idx]
+        anchor_negative_similarity = similarities[negative_idx]
+        positive_negative_similarity = similarity_matrix[positive_idx, negative_idx]
+
         triplets.append((anchor, positive, negative))
+        cosine_similarities.append((anchor_positive_similarity, anchor_negative_similarity, positive_negative_similarity))
 
-    return triplets
-
+    return triplets, cosine_similarities
 
 if __name__ == "__main__":
 
@@ -173,7 +180,7 @@ if __name__ == "__main__":
 
     # Initialize Word2Vec CBOW model
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    cbow_model = Word2VecModel(vocab_size=len(tokenizer.vocabulary), embedding_dim=EMBEDDING_DIM).to(device)
+    cbow_model = Word2VecModel(vocab_size=len(tokenizer.get_vocabulary()), embedding_dim=EMBEDDING_DIM).to(device)
 
     # Train model
     train_losses, val_losses = train(cbow_model, train_loader, val_loader, epochs=EPOCHS, lr=LEARNING_RATE)
@@ -183,4 +190,9 @@ if __name__ == "__main__":
     # Plot losses
     plot_losses(train_losses, val_losses)
     # get triplets
-    print(find_triplets(dataset, cbow_model, no_of_triplets=2))
+    triplets,cosine_similarities = find_triplets(dataset, cbow_model, no_of_triplets=2)
+    print("Triplets and Cosine Similarities:")
+    for triplet, similarities in zip(triplets, cosine_similarities):
+        print(f"Triplet: {triplet}")
+        print(f"Cosine Similarities: Anchor-Positive: {similarities[0]:.4f}, Anchor-Negative: {similarities[1]:.4f}, Positive-Negative: {similarities[2]:.4f}")
+        print()
