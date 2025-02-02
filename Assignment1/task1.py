@@ -4,10 +4,18 @@ import json
 
 GROUP_NO = 43  
 
+VOCAB_SIZE = 5000
+
 class WordPieceTokenizer:
     def __init__(self, vocab_size=10000):
         self.vocab_size = vocab_size
-        self.vocabulary = {"[PAD]", "[UNK]"} # Special tokens   
+        self.vocabulary = {"[PAD]", "[UNK]"} # Special tokens  
+
+    def get_vocabulary(self):
+        '''
+        Returns the vocabulary as a sorted list.
+        '''
+        return sorted(list(self.vocabulary))
 
     def preprocess_data(self, text):
         """
@@ -147,7 +155,7 @@ class WordPieceTokenizer:
 
 if __name__ == "__main__":
 
-    tokenizer = WordPieceTokenizer(vocab_size=5000)
+    tokenizer = WordPieceTokenizer(vocab_size=VOCAB_SIZE)
 
     # Read corpus.txt
     with open("corpus.txt", "r") as file:
@@ -158,7 +166,7 @@ if __name__ == "__main__":
 
     # Save vocabulary to file
     with open(f"vocabulary_{GROUP_NO}.txt", "w") as file:
-        for token in sorted(tokenizer.vocabulary):
+        for token in tokenizer.get_vocabulary():
             file.write(f"{token}\n")
     print(f"Vocabulary saved as 'vocabulary_{GROUP_NO}.txt'.")
 
