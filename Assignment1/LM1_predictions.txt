@@ -1,0 +1,15 @@
+Input: i felt like earlier this year i was starting to feel emotional that it
+Predicted: ##s a ##s
+
+Input: i do need constant reminders when i go through lulls in feeling submiss
+Predicted: b ##e ##caus
+
+Input: i was really feeling crappy even after my awesome
+Predicted: blah and th
+
+Input: i finally realise the feeling of being hated and its after effects are
+Predicted: a big compassionat
+
+Input: i am feeling unhappy and weird
+Predicted: and i f
+
