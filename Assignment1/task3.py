@@ -6,6 +6,7 @@ from task1 import WordPieceTokenizer, GROUP_NO
 from task2 import Word2VecDataset, Word2VecModel
 import numpy as np
 import matplotlib.pyplot as plt
+import os
 
 CONTEXT_SIZE_LM = 4
 BATCH_SIZE_LM = 512
@@ -43,7 +44,7 @@ class NeuralLMDataset(Dataset):
             for i in range(len(tokenized_sentence) - (2 * self.context_size)):
                 context = tokenized_sentence[i:i + self.context_size]  # Previous N words
                 target = tokenized_sentence[i + self.context_size]  # Next word
-                data.append((context, target))
+                data.append((torch.tensor(context, dtype=torch.long), torch.tensor(target, dtype=torch.long)))
 
         return data
 
@@ -56,12 +57,13 @@ class NeuralLMDataset(Dataset):
 
         # Convert context tokens to embeddings (get embeddings from Word2Vec model)
         with torch.no_grad():  # Disable gradient tracking
-            context_embeddings = self.word2vec_model.embeddings(torch.tensor(context, dtype=torch.long))
+            context,target = context.to(self.word2vec_model.embeddings.weight.device), target.to(self.word2vec_model.embeddings.weight.device)
+            context_embeddings = self.word2vec_model.embeddings(context)
 
         # Flatten the concatenated embeddings (size: embedding_dim * context_size)
         context_vector = context_embeddings.view(-1)
 
-        return context_vector, torch.tensor(target, dtype=torch.long)
+        return context_vector, target
 
 
 
@@ -197,49 +199,80 @@ def compute_perplexity(model, dataloader, device):
 def predict_next_tokens(model, sentence, tokenizer, word2vec_model, context_size, num_predictions=3):
     """
     Predicts the next 'num_predictions' tokens one by one for a given sentence.
-    
+
     Args:
         model: Trained neural language model.
         sentence (str): Input sentence.
         tokenizer (WordPieceTokenizer): Tokenizer.
         word2vec_model (Word2VecModel): Pre-trained Word2Vec model.
         context_size (int): Context window size.
-        num_predictions (int): Number of tokens to predict.
-    
+        num_predictions (int): Number of Next tokens to predict.
+
     Returns:
         List of predicted tokens.
     """
     model.eval()  # Set model to evaluation mode
     predicted_tokens = []
-    
+
     # Tokenize input sentence
     tokenized_sentence = tokenizer.tokenize(sentence, pad_size=context_size)
-    
+
     # Convert tokens to indices
     token_to_idx = {token: i for i, token in enumerate(tokenizer.get_vocabulary())}
     idx_to_token = {i: token for token, i in token_to_idx.items()}
     context = [token_to_idx.get(token, -1) for token in tokenized_sentence]  # Map tokens to indices
-    context = context[-2*context_size:-context_size]  # Limit context to context_size 
-    
+    context = context[-2*context_size:-context_size]  # Limit context to context_size
+
     for _ in range(num_predictions):
         # Convert context tokens to embeddings
         with torch.no_grad():
             context_tensor = torch.tensor(context, dtype=torch.long).to(next(model.parameters()).device)
             context_embeddings = word2vec_model.embeddings(context_tensor).view(-1)  # Flatten
-        
+
         # Predict next token
         output = model(context_embeddings.unsqueeze(0))  # Add batch dimension
         predicted_idx = torch.argmax(output, dim=1).item()  # Get highest probability token
-        
+
         # Get the corresponding token
         predicted_token = idx_to_token.get(predicted_idx, "[UNK]")  # Default to [UNK] if token not found
         predicted_tokens.append(predicted_token)
-        
+
         # Update context by adding the predicted token and removing the first one
         context.append(predicted_idx)
         context.pop(0)  # Maintain context size
 
     return predicted_tokens
+
+def predict_txt(model, file_path, num_predictions, tokenizer, word2vec_model, context_size, model_name="LM_Model"):
+    """
+    Predicts the next 'num_predictions' tokens for each line in a text file and saves the results.
+
+    Args:
+        model: Trained neural language model.
+        file_path (str): Path to the text file.
+        num_predictions (int): Number of next tokens to predict.
+        tokenizer: Tokenizer used for tokenizing input text.
+        word2vec_model: Pre-trained Word2Vec model.
+        context_size (int): Context window size.
+        model_name (str): Name of the model for output file naming.
+    """
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"The file '{file_path}' does not exist.")
+    
+    output_file = f"{model_name}_predictions.txt"
+    
+    with open(file_path, "r", encoding="utf-8") as file, open(output_file, "w", encoding="utf-8") as output:
+        lines = file.readlines()
+        for line in lines:
+            cleaned_line = line.strip()
+            if not cleaned_line:
+                continue  # Skip empty lines
+            
+            predicted_tokens = predict_next_tokens(model, cleaned_line, tokenizer, word2vec_model, context_size, num_predictions)
+            predicted_text = " ".join(predicted_tokens)
+            output.write(f"Input: {cleaned_line}\nPredicted: {predicted_text}\n\n")
+    
+    print(f"Predictions saved to {output_file}")
 
 
 if __name__ == "__main__":
@@ -266,6 +299,7 @@ if __name__ == "__main__":
     saved_vocab_size, saved_embedding_dim = trained_cbow_checkpoint["embeddings.weight"].shape
     word2vec_model = Word2VecModel(vocab_size=saved_vocab_size, embedding_dim=saved_embedding_dim)
     word2vec_model.load_state_dict(trained_cbow_checkpoint)
+    word2vec_model.to(device)
     word2vec_model.eval() # Set model to evaluation mode
 
     # Create dataset
@@ -292,12 +326,15 @@ if __name__ == "__main__":
         print(f"{name} - Train Accuracy: {train_accuracy:.2f}%, Validation Accuracy: {val_accuracy:.2f}%")
         print(f"{name} - Train Perplexity: {train_perplexity:.2f}, Validation Perplexity: {val_perplexity:.2f}")
         
-        # Save model
-        torch.save(model.state_dict(), f"neural_{name}.pth")
-
         # Plot losses
         plt.plot(train_losses, label=f"Train {name}")
         plt.plot(val_losses, label=f"Val {name}")
+
+        # Predict Sample test
+        predict_txt(model, "Task 3/sample_test.txt", 3, tokenizer, word2vec_model, CONTEXT_SIZE_LM, name)
+
+        # Save model
+        torch.save(model.state_dict(), f"neural_{name}.pth")
     
     plt.xlabel("Epochs")
     plt.ylabel("Loss")
